@@ -30,8 +30,8 @@ from sklearn.metrics import (
 # ---------------------------------------------------------------------------
 
 def load_data(
-    prod_path: str = r"dunnhumby_Breakfast-at-the-Frat\dunnhumby_prod.csv",
-    trans_path: str = r"dunnhumby_Breakfast-at-the-Frat\dunnhumby_trans.csv",
+    prod_path: str = r"data\dunnhumby_prod.csv",
+    trans_path: str = r"data\dunnhumby_trans.csv",
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Read the raw product and transaction CSV files.
@@ -165,7 +165,7 @@ def fit_promo_lift_models(
     promo_lift_df : DataFrame with one row per UPC; lift columns are named
                     ``feature_lift_pct_m1`` … ``tpr_lift_pct_m12``
     """
-    required_cols = {"UPC", "UNITS", "PRICE", "FEATURE", "DISPLAY", "TPR_ONLY", "WEEK_END_DATE"}
+    required_cols = {"UPC", "UNITS", "PRICE", "FEATURE", "DISPLAY", "TPR_ONLY", "WEEK_END_DATE", "BASE_PRICE"}
     missing = required_cols - set(df.columns)
     if missing:
         raise KeyError(f"Missing required columns: {sorted(missing)}")
@@ -192,7 +192,7 @@ def fit_promo_lift_models(
         sub["LOG_PRICE"] = np.log(sub["PRICE"])
         sub["MONTH"]     = pd.to_datetime(sub["WEEK_END_DATE"]).dt.month
 
-        model           = smf.ols(formula, data=sub).fit()
+        model      = smf.ols(formula, data=sub).fit()
         model_store[upc] = model
 
         row = {
@@ -348,7 +348,6 @@ def save_models(
     promo_lift_df : DataFrame produced by fit_promo_lift_models
     path          : destination file path (default: ``promo_models.joblib``)
     """
-    import joblib
     payload = {"model_store": model_store, "promo_lift_df": promo_lift_df}
     joblib.dump(payload, path)
     print(f"Saved {len(model_store)} models to '{path}'")
@@ -368,7 +367,6 @@ def load_models(path: str = "promo_models.joblib") -> tuple[dict, pd.DataFrame]:
     model_store   : dict mapping UPC to fitted OLS result
     promo_lift_df : DataFrame with per-UPC lift estimates
     """
-    import joblib
     payload = joblib.load(path)
     model_store   = payload["model_store"]
     promo_lift_df = payload["promo_lift_df"]

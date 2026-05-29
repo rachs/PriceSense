@@ -12,7 +12,7 @@ Usage
 
     model_store, _ = load_models("promo_models.joblib")
     result = predict_promo_lift(
-        model=model_store[upc],
+        model=model_store[upc]["model"],
         upc=upc,
         new_price=2.99,
         promo_type="FEATURE",
@@ -145,7 +145,7 @@ def batch_predict_promo_lift(
             print(f"UPC {upc} not found in model_store – skipping.")
             continue
         result = predict_promo_lift(
-            model      = model_store[upc],
+            model      = model_store[upc]["model"],
             upc        = upc,
             new_price  = req["new_price"],
             promo_type = req["promo_type"],
