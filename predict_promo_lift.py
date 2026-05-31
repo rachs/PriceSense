@@ -10,9 +10,9 @@ Usage
     from promo_lift_model import load_models
     from predict_promo_lift import predict_promo_lift
 
-    model_store, _ = load_models("promo_models.joblib")
+    model_store, _ = load_models("promo_models.csv")
     result = predict_promo_lift(
-        model=model_store[upc]["model"],
+        model=model_store[upc],
         upc=upc,
         new_price=2.99,
         promo_type="FEATURE",
@@ -145,7 +145,7 @@ def batch_predict_promo_lift(
             print(f"UPC {upc} not found in model_store – skipping.")
             continue
         result = predict_promo_lift(
-            model      = model_store[upc]["model"],
+            model      = model_store[upc],
             upc        = upc,
             new_price  = req["new_price"],
             promo_type = req["promo_type"],
@@ -169,7 +169,7 @@ if __name__ == "__main__":
     except ImportError:
         sys.exit("Could not import promo_lift_model. Run this script from the PriceSense directory.")
 
-    model_path = "promo_models.joblib"
+    model_path = "promo_models.csv"
     if not os.path.exists(model_path):
         sys.exit(
             f"'{model_path}' not found. Run promo_lift_model.py first to train and save models."
@@ -189,7 +189,7 @@ if __name__ == "__main__":
     args = parser.parse_args()      
     sample_upc = args.upc
     new_price = args.new_price
-    promo_type = args.promo_type
+    promo_type = args.promo_type 
     month = args.month
 
     result = predict_promo_lift(

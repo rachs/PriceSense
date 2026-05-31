@@ -8,7 +8,8 @@ PriceSense AI predicts promotional unit lift for a product UPC at a given price,
 - `promo_lift_model.py` — data loading, preprocessing, model training, and evaluation
 - `predict_promo_lift.py` — helper for single and batch lift predictions
 - `data\` — bundled Dunnhumby CSV files used by the model
-- `promo_models.joblib` — saved model store generated after training
+- `promo_models.csv` — saved model coefficients generated after training
+- `promo_lift_df.csv` — saved per-UPC promo lift summary
 
 ## Requirements
 
@@ -17,7 +18,6 @@ PriceSense AI predicts promotional unit lift for a product UPC at a given price,
 - `numpy`
 - `statsmodels`
 - `scikit-learn`
-- `joblib`
 - `streamlit`
 
 ## Quick start
@@ -25,7 +25,7 @@ PriceSense AI predicts promotional unit lift for a product UPC at a given price,
 1. Install the dependencies:
 
    ```bash
-   pip install pandas numpy statsmodels scikit-learn joblib streamlit
+   pip install pandas numpy statsmodels scikit-learn streamlit
    ```
 
 2. Train and save the models:
@@ -42,7 +42,7 @@ PriceSense AI predicts promotional unit lift for a product UPC at a given price,
 
 ## How it works
 
-The training script merges product and transaction data, derives price features, fits one OLS model per UPC, and saves the resulting model store to `promo_models.joblib`. The Streamlit app loads that file and lets you compare baseline units against a promo scenario.
+The training script merges product and transaction data, derives price features, fits one OLS model per UPC, and saves the resulting model coefficients to `promo_models.csv` plus the promo lift summary to `promo_lift_df.csv`. The Streamlit app loads the CSV files and lets you compare baseline units against a promo scenario.
 
 ## Input data
 

@@ -15,7 +15,7 @@ import streamlit as st
 from promo_lift_model import load_models
 from predict_promo_lift import predict_promo_lift, VALID_PROMO_TYPES
 
-MODEL_PATH = "promo_models.joblib"
+MODEL_PATH = "promo_models.csv"
 MONTH_NAMES = {
     1: "January", 2: "February", 3: "March", 4: "April",
     5: "May", 6: "June", 7: "July", 8: "August",

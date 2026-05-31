@@ -13,7 +13,8 @@ save_models             – persist model_store and promo_lift_df to disk
 load_models             – restore model_store and promo_lift_df from disk
 """
 
-import joblib
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import statsmodels.formula.api as smf
@@ -23,6 +24,45 @@ from sklearn.metrics import (
     r2_score,
     root_mean_squared_error,
 )
+
+
+MODEL_PATH = "promo_models.csv"
+PROMO_LIFT_PATH = "promo_lift_df.csv"
+
+
+class PromoLiftModel:
+    """Lightweight prediction wrapper built from saved coefficient CSV rows."""
+
+    def __init__(self, params: pd.Series, rsquared: float = np.nan, nobs: float = np.nan):
+        self.params = params.astype(float)
+        self.rsquared = rsquared
+        self.nobs = nobs
+
+    def _predict_row(self, row: pd.Series) -> float:
+        value = float(self.params.get("Intercept", self.params.get("const", 0.0)))
+        value += float(self.params.get("LOG_PRICE", 0.0)) * float(row.get("LOG_PRICE", 0.0))
+
+        month_raw = row.get("MONTH", 1)
+        month = int(month_raw) if pd.notna(month_raw) else 1
+
+        if month != 1:
+            value += float(self.params.get(f"C(MONTH)[T.{month}]", 0.0))
+
+        for promo in ("FEATURE", "DISPLAY", "TPR_ONLY"):
+            flag = row.get(promo, 0)
+            if pd.isna(flag) or float(flag) == 0.0:
+                continue
+
+            value += float(self.params.get(f"{promo}:C(MONTH)[{month}]", 0.0))
+
+        return value
+
+    def predict(self, exog: pd.DataFrame | pd.Series) -> pd.Series:
+        if isinstance(exog, pd.Series):
+            exog = exog.to_frame().T
+
+        predictions = exog.apply(self._predict_row, axis=1)
+        return pd.Series(predictions.to_numpy(), index=exog.index)
 
 
 # ---------------------------------------------------------------------------
@@ -333,44 +373,97 @@ def get_performance_metrics(
 # 5. Save / load model store
 # ---------------------------------------------------------------------------
 
+def _model_store_to_frame(model_store: dict) -> pd.DataFrame:
+    param_names: list[str] = []
+    seen = set()
+    for model in model_store.values():
+        for name in getattr(model, "params").index:
+            if name not in seen:
+                seen.add(name)
+                param_names.append(name)
+
+    rows = []
+    for upc, model in model_store.items():
+        row = {name: np.nan for name in param_names}
+        row["UPC"] = upc
+        row["r_squared"] = getattr(model, "rsquared", np.nan)
+        row["n_obs"] = getattr(model, "nobs", np.nan)
+
+        for name, value in getattr(model, "params").items():
+            row[name] = value
+
+        rows.append(row)
+
+    columns = ["UPC", "r_squared", "n_obs"] + param_names
+    return pd.DataFrame(rows, columns=columns)
+
+
+def _frame_to_model_store(model_params_df: pd.DataFrame) -> dict:
+    meta_cols = {"UPC", "r_squared", "n_obs"}
+    param_cols = [col for col in model_params_df.columns if col not in meta_cols]
+
+    model_store = {}
+    for _, row in model_params_df.iterrows():
+        params = row[param_cols].dropna()
+        model_store[row["UPC"]] = PromoLiftModel(
+            params=params,
+            rsquared=row.get("r_squared", np.nan),
+            nobs=row.get("n_obs", np.nan),
+        )
+
+    return model_store
+
+
 def save_models(
     model_store: dict,
     promo_lift_df: pd.DataFrame,
-    path: str = "promo_models.joblib",
+    model_path: str = MODEL_PATH,
+    promo_lift_path: str = PROMO_LIFT_PATH,
 ) -> None:
     """
-    Persist the model store and the promo lift summary DataFrame to a single
-    file using joblib.
+    Persist the model store coefficients and promo lift summary as CSV files.
 
     Parameters
     ----------
-    model_store   : dict mapping UPC to fitted OLS result
-    promo_lift_df : DataFrame produced by fit_promo_lift_models
-    path          : destination file path (default: ``promo_models.joblib``)
+    model_store     : dict mapping UPC to fitted OLS result
+    promo_lift_df   : DataFrame produced by fit_promo_lift_models
+    model_path      : destination CSV path for model coefficients
+    promo_lift_path : destination CSV path for the promo lift summary
     """
-    payload = {"model_store": model_store, "promo_lift_df": promo_lift_df}
-    joblib.dump(payload, path)
-    print(f"Saved {len(model_store)} models to '{path}'")
+    model_path = Path(model_path)
+    promo_lift_path = Path(promo_lift_path)
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    promo_lift_path.parent.mkdir(parents=True, exist_ok=True)
+
+    model_params_df = _model_store_to_frame(model_store)
+    model_params_df.to_csv(model_path, index=False)
+    promo_lift_df.to_csv(promo_lift_path, index=False)
+    print(f"Saved {len(model_store)} models to '{model_path}'")
+    print(f"Saved promo lift summary to '{promo_lift_path}'")
 
 
-def load_models(path: str = "promo_models.joblib") -> tuple[dict, pd.DataFrame]:
+def load_models(
+    model_path: str = MODEL_PATH,
+    promo_lift_path: str = PROMO_LIFT_PATH,
+) -> tuple[dict, pd.DataFrame]:
     """
-    Restore model store and promo lift DataFrame from a file saved by
+    Restore model store and promo lift DataFrame from CSV files saved by
     ``save_models``.
 
     Parameters
     ----------
-    path : path to the joblib file created by save_models
+    model_path      : path to the model coefficient CSV created by save_models
+    promo_lift_path : path to the promo lift summary CSV created by save_models
 
     Returns
     -------
-    model_store   : dict mapping UPC to fitted OLS result
+    model_store   : dict mapping UPC to fitted prediction wrappers
     promo_lift_df : DataFrame with per-UPC lift estimates
     """
-    payload = joblib.load(path)
-    model_store   = payload["model_store"]
-    promo_lift_df = payload["promo_lift_df"]
-    print(f"Loaded {len(model_store)} models from '{path}'")
+    model_params_df = pd.read_csv(model_path)
+    promo_lift_df = pd.read_csv(promo_lift_path)
+    model_store = _frame_to_model_store(model_params_df)
+    print(f"Loaded {len(model_store)} models from '{model_path}'")
     return model_store, promo_lift_df
 
 
