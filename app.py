@@ -114,10 +114,19 @@ with st.form("promo_lift_form"):
 # the typical price for that product.
 if submitted:
     import pandas as pd
-    trans_df = pd.read_csv(r"data\dunnhumby_trans.csv")
-    base_price_upc_month = trans_df.loc[(trans_df["UPC"] == selected_upc) & (pd.to_datetime(trans_df["WEEK_END_DATE"]).dt.month == month_label),"BASE_PRICE"].median()  
-    if pd.notna(base_price_upc_month):
-        st.info(f"💰 The median (base) price for UPC **{str(int(selected_upc)) if float(selected_upc).is_integer() else str(selected_upc)}** is **${base_price_upc_month:.2f}**.")
+    from pathlib import Path
+    data_path = Path(__file__).resolve().parent / "data" / "dunnhumby_trans.csv"
+    if data_path.exists():
+        trans_df = pd.read_csv(data_path)
+        base_price_upc_month = trans_df.loc[
+            (trans_df["UPC"] == selected_upc) &
+            (pd.to_datetime(trans_df["WEEK_END_DATE"]).dt.month == month_label),
+            "BASE_PRICE",
+        ].median()
+        if pd.notna(base_price_upc_month):
+            st.info(f"💰 The median (base) price for UPC **{str(int(selected_upc)) if float(selected_upc).is_integer() else str(selected_upc)}** is **${base_price_upc_month:.2f}**.")
+    else:
+        st.warning(f"Data file not found: {data_path}. Add 'dunnhumby_trans.csv' under the app's data/ directory to enable base-price display.")
 
 # ---------------------------------------------------------------------------
 # Prediction & results
